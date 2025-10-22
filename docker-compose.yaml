@@ -10,7 +10,7 @@ services:
     restart: unless-stopped
     
     environment:
-      - TZ=Europe/Moscow
+      - TZ=${TZ:-Europe/Moscow}
       
       # Имя проекта (используется в названии архива: {name}-backup-2025-10-22_03-00-00.tar.gz)
       - BACKUP_PROJECT_NAME=${BACKUP_PROJECT_NAME:-project}
@@ -18,7 +18,7 @@ services:
       # S3 бакет для хранения бэкапов (обязательно)
       - BACKUP_S3_BUCKET=${BACKUP_S3_BUCKET}
       
-      # Папка внутри бакета (необязательно, по умолчанию - корень)
+      # Папка внутри бакета (необязательно, по умолчанию - имя проекта)
       - BACKUP_S3_FOLDER=${BACKUP_S3_FOLDER:-}
       
       # Эндпоинт S3 сервиса (обязательно): s3.twcstorage.ru, storage.yandexcloud.net и т.д.
@@ -31,11 +31,11 @@ services:
       # Регион S3
       - BACKUP_S3_REGION=${BACKUP_S3_REGION:-ru-1}
       
-      # Количество дней хранения бэкапов (автоматически удаляются старые)
-      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-30}
+      # Количество последних версий бэкапов для хранения (автоматически удаляются старые)
+      - BACKUP_RETENTION_COUNT=${BACKUP_RETENTION_COUNT:-30}
       
-      # Расписание запуска в формате cron: "0 3 * * *" = каждый день в 03:00
-      - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 3 * * *}
+      # Расписание запуска в формате cron: "0 5 * * *" = каждый день в 05:00 МСК
+      - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 5 * * *}
       
       # Запускать ли бэкап сразу при старте контейнера (true/false)
       - BACKUP_ON_START=${BACKUP_ON_START:-false}

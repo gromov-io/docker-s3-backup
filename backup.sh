@@ -169,17 +169,17 @@ upload_to_s3() {
     fi
     
     local backup_filename=$(basename "$backup_path")
+    local project_name="${BACKUP_PROJECT_NAME:-project}"
     
     # Формируем путь с учетом BACKUP_S3_FOLDER
-    local s3_folder="${BACKUP_S3_FOLDER}"
-    if [ -n "$s3_folder" ]; then
-        # Удаляем начальный и конечный слэш, если есть
-        s3_folder="${s3_folder#/}"
-        s3_folder="${s3_folder%/}"
-        local s3_path="s3://${BACKUP_S3_BUCKET}/${s3_folder}/${backup_filename}"
-    else
-        local s3_path="s3://${BACKUP_S3_BUCKET}/${backup_filename}"
-    fi
+    # По умолчанию используется имя проекта как папка
+    local s3_folder="${BACKUP_S3_FOLDER:-$project_name}"
+    
+    # Удаляем начальный и конечный слэш, если есть
+    s3_folder="${s3_folder#/}"
+    s3_folder="${s3_folder%/}"
+    
+    local s3_path="s3://${BACKUP_S3_BUCKET}/${s3_folder}/${backup_filename}"
     
     log "Загрузка бэкапа в S3: ${s3_path}"
     
@@ -193,51 +193,55 @@ upload_to_s3() {
 
 # Удаление старых бэкапов из S3
 cleanup_old_backups() {
-    local retention_days="${BACKUP_RETENTION_DAYS:-30}"
+    local retention_count="${BACKUP_RETENTION_COUNT:-30}"
     
-    log "Очистка старых бэкапов (старше ${retention_days} дней)..."
+    log "Очистка старых бэкапов (храним последние ${retention_count} версий)..."
     
-    # Вычисляем дату отсечения (совместимо с BusyBox)
-    local retention_seconds=$((retention_days * 86400))
-    local current_timestamp=$(date +%s)
-    local cutoff_timestamp=$((current_timestamp - retention_seconds))
-    local cutoff_date=$(date -d "@${cutoff_timestamp}" '+%Y-%m-%d' 2>/dev/null || date -r "${cutoff_timestamp}" '+%Y-%m-%d' 2>/dev/null || echo "")
+    # Формируем путь с учетом BACKUP_S3_FOLDER
+    # По умолчанию используется имя проекта как папка
+    local project_name="${BACKUP_PROJECT_NAME:-project}"
+    local s3_folder="${BACKUP_S3_FOLDER:-$project_name}"
     
-    if [ -z "$cutoff_date" ]; then
-        log_warning "Не удалось вычислить дату отсечения, пропускаем очистку"
+    # Удаляем начальный и конечный слэш, если есть
+    s3_folder="${s3_folder#/}"
+    s3_folder="${s3_folder%/}"
+    
+    local s3_list_path="s3://${BACKUP_S3_BUCKET}/${s3_folder}/"
+    
+    # Получаем список всех бэкапов и сортируем по дате (новые первые)
+    local backup_list=$(aws s3 ls "${s3_list_path}" $AWS_ENDPOINT_ARG | grep "\-backup-" | awk '{print $4}' | sort -r)
+    
+    if [ -z "$backup_list" ]; then
+        log "Бэкапы не найдены"
         return 0
     fi
     
-    log "Удаление бэкапов старше ${cutoff_date}..."
+    local total_backups=$(echo "$backup_list" | wc -l)
+    log "Найдено бэкапов: ${total_backups}"
     
-    # Формируем путь с учетом BACKUP_S3_FOLDER
-    local s3_folder="${BACKUP_S3_FOLDER}"
-    if [ -n "$s3_folder" ]; then
-        s3_folder="${s3_folder#/}"
-        s3_folder="${s3_folder%/}"
-        local s3_list_path="s3://${BACKUP_S3_BUCKET}/${s3_folder}/"
-    else
-        local s3_list_path="s3://${BACKUP_S3_BUCKET}/"
+    # Если бэкапов меньше или равно лимиту, ничего не удаляем
+    if [ "$total_backups" -le "$retention_count" ]; then
+        log "Количество бэкапов в пределах лимита, удаление не требуется"
+        return 0
     fi
     
-    # Получаем список всех бэкапов
-    aws s3 ls "${s3_list_path}" $AWS_ENDPOINT_ARG | grep "\-backup-" | while read -r line; do
-        # Извлекаем дату из имени файла (*-backup-YYYY-MM-DD_HH-MM-SS.tar.gz)
-        local filename=$(echo "$line" | awk '{print $4}')
-        local file_date=$(echo "$filename" | sed -n 's/.*-backup-\([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\).*/\1/p')
+    # Удаляем старые бэкапы (все после N последних)
+    local deleted_count=0
+    local index=0
+    
+    echo "$backup_list" | while read -r filename; do
+        index=$((index + 1))
         
-        if [ -n "$file_date" ] && [ "$file_date" \< "$cutoff_date" ]; then
-            log "Удаление старого бэкапа: ${filename}"
-            if [ -n "$s3_folder" ]; then
-                aws s3 rm "s3://${BACKUP_S3_BUCKET}/${s3_folder}/${filename}" $AWS_ENDPOINT_ARG || {
-                    log_warning "Не удалось удалить ${filename}"
-                }
-            else
-                aws s3 rm "s3://${BACKUP_S3_BUCKET}/${filename}" $AWS_ENDPOINT_ARG || {
-                    log_warning "Не удалось удалить ${filename}"
-                }
-            fi
+        # Пропускаем первые N (самые новые)
+        if [ "$index" -le "$retention_count" ]; then
+            continue
         fi
+        
+        log "Удаление старого бэкапа: ${filename}"
+        aws s3 rm "s3://${BACKUP_S3_BUCKET}/${s3_folder}/${filename}" $AWS_ENDPOINT_ARG || {
+            log_warning "Не удалось удалить ${filename}"
+        }
+        deleted_count=$((deleted_count + 1))
     done
     
     log "Очистка завершена"

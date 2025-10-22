@@ -36,6 +36,9 @@ RUN chmod +x /scripts/backup.sh /scripts/entrypoint.sh
 # Устанавливаем рабочую директорию
 WORKDIR /scripts
 
+# Устанавливаем дефолтный часовой пояс
+ENV TZ=Europe/Moscow
+
 # Запускаем entrypoint
 CMD ["/scripts/entrypoint.sh"]
 

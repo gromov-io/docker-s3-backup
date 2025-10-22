@@ -5,11 +5,11 @@ echo "Universal Docker Project Backup Service"
 echo "================================================"
 echo "Project: ${BACKUP_PROJECT_NAME:-project}"
 echo "Source Path: ${BACKUP_SOURCE_PATH:-.} (mounted as /backup-source)"
-echo "Timezone: ${TZ:-UTC}"
-echo "Backup Schedule: ${BACKUP_SCHEDULE:-0 3 * * *}"
+echo "Timezone: ${TZ:-Europe/Moscow}"
+echo "Backup Schedule: ${BACKUP_SCHEDULE:-0 5 * * *}"
 echo "S3 Endpoint: ${BACKUP_S3_ENDPOINT:-не указан}"
 echo "S3 Bucket: ${BACKUP_S3_BUCKET:-не указан}"
-echo "Retention Days: ${BACKUP_RETENTION_DAYS:-30}"
+echo "Retention Count: ${BACKUP_RETENTION_COUNT:-30} последних версий"
 echo "Backup Type: Full project directory"
 if [ -n "$BACKUP_STOP_SERVICES" ]; then
     echo "Services to stop: ${BACKUP_STOP_SERVICES}"
@@ -25,9 +25,9 @@ if [ -z "$BACKUP_S3_BUCKET" ] || [ -z "$BACKUP_S3_ACCESS_KEY" ] || [ -z "$BACKUP
 fi
 
 # Создаем crontab файл с заданным расписанием
-echo "${BACKUP_SCHEDULE:-0 3 * * *} /scripts/backup.sh >> /var/log/backup.log 2>&1" > /scripts/crontab
+echo "${BACKUP_SCHEDULE:-0 5 * * *} /scripts/backup.sh >> /var/log/backup.log 2>&1" > /scripts/crontab
 
-echo "Расписание установлено: ${BACKUP_SCHEDULE:-0 3 * * *}"
+echo "Расписание установлено: ${BACKUP_SCHEDULE:-0 5 * * *}"
 echo "Логи сохраняются в: /var/log/backup.log"
 echo "================================================"
 
