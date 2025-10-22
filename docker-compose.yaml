@@ -1,0 +1,60 @@
+# ===========================================
+# Universal Docker Project Backup Service
+# Автоматическое резервное копирование Docker-проектов в S3
+# ===========================================
+
+services:
+  backup:
+    build: .
+    container_name: project-backup
+    restart: unless-stopped
+    
+    environment:
+      - TZ=Europe/Moscow
+      
+      # Имя проекта (используется в названии архива: {name}-backup-2025-10-22_03-00-00.tar.gz)
+      - BACKUP_PROJECT_NAME=${BACKUP_PROJECT_NAME:-project}
+      
+      # S3 бакет для хранения бэкапов (обязательно)
+      - BACKUP_S3_BUCKET=${BACKUP_S3_BUCKET}
+      
+      # Папка внутри бакета (необязательно, по умолчанию - корень)
+      - BACKUP_S3_FOLDER=${BACKUP_S3_FOLDER:-}
+      
+      # Эндпоинт S3 сервиса (обязательно): s3.twcstorage.ru, storage.yandexcloud.net и т.д.
+      - BACKUP_S3_ENDPOINT=${BACKUP_S3_ENDPOINT}
+      
+      # Ключи доступа к S3 (обязательно)
+      - BACKUP_S3_ACCESS_KEY=${BACKUP_S3_ACCESS_KEY}
+      - BACKUP_S3_SECRET_KEY=${BACKUP_S3_SECRET_KEY}
+      
+      # Регион S3
+      - BACKUP_S3_REGION=${BACKUP_S3_REGION:-ru-1}
+      
+      # Количество дней хранения бэкапов (автоматически удаляются старые)
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-30}
+      
+      # Расписание запуска в формате cron: "0 3 * * *" = каждый день в 03:00
+      - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 3 * * *}
+      
+      # Запускать ли бэкап сразу при старте контейнера (true/false)
+      - BACKUP_ON_START=${BACKUP_ON_START:-false}
+      
+      # Список сервисов для остановки перед бекапом через пробел (необязательно): gitea gitea-db
+      - BACKUP_STOP_SERVICES=${BACKUP_STOP_SERVICES:-}
+    
+    volumes:
+      # Директория проекта для бекапа (переопределяется через BACKUP_SOURCE_PATH, по умолчанию: текущая директория)
+      - ${BACKUP_SOURCE_PATH:-.}:/backup-source:ro
+      
+      # Синхронизация времени с хостом
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+      
+      # Docker socket для управления контейнерами (нужен для BACKUP_STOP_SERVICES)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+# Раскомментируйте если нужно подключить к сети других сервисов
+#networks:
+#  gitea_network:
+#    name: gitea_network

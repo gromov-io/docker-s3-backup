@@ -1,0 +1,6 @@
+# Universal Backup Cron Jobs
+# Это файл будет перезаписан при запуске контейнера на основе BACKUP_SCHEDULE
+# По умолчанию: каждый день в 03:00
+0 3 * * * /scripts/backup.sh >> /var/log/backup.log 2>&1
+
+
