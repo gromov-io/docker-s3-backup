@@ -40,7 +40,8 @@ services:
       # Запускать ли бэкап сразу при старте контейнера (true/false)
       - BACKUP_ON_START=${BACKUP_ON_START:-false}
       
-      # Список сервисов для остановки перед бекапом через пробел (необязательно): gitea gitea-db
+      # Список сервисов для остановки перед бекапом через пробел (необязательно): gitea postgres
+      # Контейнер backup должен быть запущен из того же docker-compose.yaml что и целевые сервисы
       - BACKUP_STOP_SERVICES=${BACKUP_STOP_SERVICES:-}
     
     volumes:

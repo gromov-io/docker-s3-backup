@@ -64,29 +64,52 @@ stop_services() {
         return 0
     fi
     
-    # Ищем docker-compose.yml в директории бекапа
-    local compose_file="/backup-source/docker-compose.yml"
+    # Определяем project name из собственных labels контейнера
+    local project_name=$(docker inspect "$HOSTNAME" --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null)
     
-    if [ ! -f "$compose_file" ]; then
-        # Пробуем docker-compose.yaml
-        compose_file="/backup-source/docker-compose.yaml"
+    if [ -z "$project_name" ]; then
+        log_warning "Не удалось определить project name автоматически"
+        log_warning "Контейнер backup должен быть запущен из того же docker-compose.yaml что и целевые сервисы"
+        return 0
     fi
     
-    if [ ! -f "$compose_file" ]; then
-        log_error "Docker Compose файл не найден в /backup-source/"
-        return 1
-    fi
-    
+    log "Project name определён автоматически: ${project_name}"
     log "Остановка сервисов: ${BACKUP_STOP_SERVICES}"
-    log "Используется compose файл: ${compose_file}"
     
-    # Останавливаем указанные сервисы
-    docker compose -f "$compose_file" down $BACKUP_STOP_SERVICES || {
-        log_error "Ошибка при остановке сервисов"
-        return 1
-    }
+    # Запоминаем ID контейнеров для последующего запуска
+    CONTAINERS_TO_RESTART=""
     
-    log "Сервисы успешно остановлены"
+    for service in $BACKUP_STOP_SERVICES; do
+        # Ищем контейнер по service name + project name + статус running
+        local container_id=$(docker ps \
+            --filter "label=com.docker.compose.service=${service}" \
+            --filter "label=com.docker.compose.project=${project_name}" \
+            --filter "status=running" \
+            --format "{{.ID}}" \
+            | head -n1)
+        
+        if [ -n "$container_id" ]; then
+            local container_name=$(docker inspect "$container_id" --format '{{.Name}}' | sed 's/^\///')
+            log "Сервис ${service} (контейнер: ${container_name}) запущен, будет остановлен"
+            
+            # Останавливаем контейнер
+            docker stop "$container_id" >/dev/null 2>&1 || {
+                log_error "Ошибка при остановке контейнера ${container_name}"
+                return 1
+            }
+            
+            # Запоминаем ID для последующего запуска
+            CONTAINERS_TO_RESTART="${CONTAINERS_TO_RESTART} ${container_id}"
+        else
+            log "Сервис ${service} не запущен или не найден, пропускаем"
+        fi
+    done
+    
+    if [ -n "$CONTAINERS_TO_RESTART" ]; then
+        log "Контейнеры успешно остановлены"
+    else
+        log "Нет запущенных сервисов для остановки"
+    fi
     
     # Даем время на корректное завершение
     sleep 5
@@ -100,28 +123,28 @@ start_services() {
         return 0
     fi
     
-    # Ищем docker-compose.yml в директории бекапа
-    local compose_file="/backup-source/docker-compose.yml"
-    
-    if [ ! -f "$compose_file" ]; then
-        # Пробуем docker-compose.yaml
-        compose_file="/backup-source/docker-compose.yaml"
+    # Проверяем что есть контейнеры для запуска
+    if [ -z "$CONTAINERS_TO_RESTART" ]; then
+        log "Нет контейнеров для запуска"
+        return 0
     fi
     
-    if [ ! -f "$compose_file" ]; then
-        log_error "Docker Compose файл не найден в /backup-source/"
-        return 1
-    fi
+    log "Запуск контейнеров..."
     
-    log "Запуск сервисов: ${BACKUP_STOP_SERVICES}"
+    # Запускаем только те контейнеры, которые были остановлены
+    for container_id in $CONTAINERS_TO_RESTART; do
+        local container_name=$(docker inspect "$container_id" --format '{{.Name}}' 2>/dev/null | sed 's/^\///')
+        
+        if [ -n "$container_name" ]; then
+            log "Запуск контейнера: ${container_name}"
+            docker start "$container_id" >/dev/null 2>&1 || {
+                log_error "Ошибка при запуске контейнера ${container_name}"
+                return 1
+            }
+        fi
+    done
     
-    # Запускаем указанные сервисы в detached режиме
-    docker compose -f "$compose_file" up -d $BACKUP_STOP_SERVICES || {
-        log_error "Ошибка при запуске сервисов"
-        return 1
-    }
-    
-    log "Сервисы успешно запущены"
+    log "Контейнеры успешно запущены"
     
     return 0
 }

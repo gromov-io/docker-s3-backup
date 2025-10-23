@@ -111,8 +111,10 @@ docker exec project-backup aws s3 ls s3://your-bucket --endpoint-url=https://you
 
 ```yaml
 environment:
-  - BACKUP_STOP_SERVICES=app db
+  - BACKUP_STOP_SERVICES=gitea postgres
 ```
+
+**Важно:** Контейнер `backup` должен быть запущен из **того же** `docker-compose.yaml` что и целевые сервисы. Project name определяется автоматически через Docker labels.
 
 Сервисы автоматически запустятся после создания архива.
 
